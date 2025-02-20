@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Enhancement with NAFNet</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .image-container { display: flex; gap: 20px; margin-top: 20px; }
+        img { max-width: 300px; height: auto; border: 1px solid #ccc; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Upload Image for AI Enhancement (NAFNet)</h1>
+    <input type="file" id="fileInput" accept="image/*">
+    <button id="enhanceButton">Enhance Image</button>
+
+    <div class="image-container hidden" id="imageResults">
+        <div>
+            <h3>Original Image:</h3>
+            <img id="beforeImage" src="" alt="Before Image">
+        </div>
+        <div>
+            <h3>Enhanced Image:</h3>
+            <img id="afterImage" src="" alt="Enhanced Image">
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('enhanceButton').addEventListener('click', function () {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files.length) {
+                alert('Please select an image.');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('http://127.0.0.1:5000/process_image', {
+                method: 'POST',
+                body: formData,
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('beforeImage').src = URL.createObjectURL(file);
+                        document.getElementById('afterImage').src = data.output_path;
+                        document.getElementById('imageResults').classList.remove('hidden');
+                    } else {
+                        alert('Processing failed: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
