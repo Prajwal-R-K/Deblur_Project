@@ -1,44 +1,52 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+import gradio as gr
 import os
 import subprocess
+import torch
+from PIL import Image
+import numpy as np
 
-app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Fix CUDA Out of Memory issue by enabling memory management
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-@app.route('/process_image', methods=['POST'])
-def process_image():
-    if 'file' not in request.files:
-        return jsonify({'status': 'error', 'message': 'No file uploaded'})
+def gradio_interface(image):
+    input_path = os.path.join(UPLOAD_FOLDER, "input.png")
+    output_path = os.path.join(OUTPUT_FOLDER, "output.png")
 
-    file = request.files['file']
-    input_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    output_path = os.path.join(OUTPUT_FOLDER, 'output.png')
-
-    file.save(input_path)
+    image.save(input_path)
 
     try:
-        subprocess.run([
-            'python', 'NAFNet/demo.py',
-            '-opt', 'NAFNet/options/test/REDS/NAFNet-width64.yml',
-            '--input_path', input_path,
-            '--output_path', output_path
-        ], check=True)
+        # Ensure CUDA memory is freed before running inference
+        torch.cuda.empty_cache()
 
-        return jsonify({'status': 'success', 'output_path': f'/outputs/output.png'})
-    except subprocess.CalledProcessError as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        # Run the NAFNet model with controlled memory usage
+        command = [
+            "python", "NAFNet/demo.py",
+            "-opt", "NAFNet/options/test/REDS/NAFNet-width64.yml",
+            "--input_path", input_path,
+            "--output_path", output_path
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
 
-@app.route('/outputs/<filename>')
-def get_output_image(filename):
-    return send_from_directory(OUTPUT_FOLDER, filename)
+        if result.returncode != 0:
+            return f"Error: {result.stderr}"
 
-if __name__ == '__main__':
-    app.run(debug=True)
+        return Image.open(output_path)
+
+    except Exception as e:
+        return f"Exception: {str(e)}"
+
+# Launch Gradio with public link
+iface = gr.Interface(
+    fn=gradio_interface,
+    inputs=gr.Image(type="pil"),
+    outputs=gr.Image(type="pil"),
+    title="Image Restoration with NAFNet"
+)
+
+iface.launch(share=True)
